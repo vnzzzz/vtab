@@ -8,6 +8,11 @@ Tab list for the Chrome side panel. Displays the current window’s tabs vertica
 - Shows `(no title)` when a tab title is unavailable to clarify state
 - Shows each tab’s favicon for quicker visual identification
 - Enables drag-and-drop reordering of the displayed tabs
+- Supports one-level group management (create, reorder, move tabs between groups) via drag-and-drop
+- Leaves ungrouped tabs at the same hierarchy level and only groups them when you explicitly add them via the context menu
+- Allows renaming groups from the header controls
+- Right-click a tab to open the “Assign to group” menu, then pick an existing group or type a new group name before committing
+- Keeps the panel order in sync with Chrome by reordering actual tabs whenever groups/tabs move
 - Matches the browser’s dark vs light preference for consistent theming
 - Keeps the list fresh by listening to `chrome.tabs` creation, update, removal, and activation events
 - Applies `setPanelBehavior` in `background.js` so the side panel opens automatically when the extension icon is clicked

@@ -6,11 +6,7 @@ import {
   moveTabToIndex,
   subscribeToTabEvents,
 } from "./panel/tabService.js";
-import {
-  renderTabList,
-  registerContainerDrop,
-  getRenderedTabCount,
-} from "./panel/tabUI.js";
+import { renderTabList } from "./panel/tabUI.js";
 
 async function activateTab(tabId) {
   try {
@@ -20,14 +16,8 @@ async function activateTab(tabId) {
   }
 }
 
-async function handleRowDrop(sourceId, targetIndex) {
+async function handleTabReorder(sourceId, targetIndex) {
   await moveTabToIndex(sourceId, targetIndex);
-  await refreshTabs();
-}
-
-async function handleContainerDrop(sourceId) {
-  const lastIndex = Math.max(getRenderedTabCount() - 1, 0);
-  await moveTabToIndex(sourceId, lastIndex);
   await refreshTabs();
 }
 
@@ -35,13 +25,27 @@ async function refreshTabs() {
   const tabs = await getCurrentWindowTabs();
   renderTabList(tabs, {
     onActivate: activateTab,
-    onRowDrop: handleRowDrop,
+    onTabReorder: handleTabReorder,
+    onGroupLayoutChange: handleGroupLayoutChange,
   });
 }
 
-refreshTabs().catch(console.error);
+async function handleGroupLayoutChange(layout) {
+  await reorderChromeTabs(layout);
+}
 
-registerContainerDrop(handleContainerDrop);
+async function reorderChromeTabs(layout) {
+  let cursor = 0;
+  for (const group of layout) {
+    for (const tabId of group.tabIds) {
+      await moveTabToIndex(tabId, cursor);
+      cursor += 1;
+    }
+  }
+  await refreshTabs();
+}
+
+refreshTabs().catch(console.error);
 
 subscribeToTabEvents(() => {
   refreshTabs().catch(console.error);
