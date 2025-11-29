@@ -139,20 +139,18 @@ h1 {
 }
 
 .group-drop-zone {
-  display: none;
-  height: 12px;
+  display: block;
+  height: 2px;
   border: 1px dashed transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   margin: 2px 0;
   transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.12;
+  pointer-events: auto;
 }
 
 body.is-group-dragging .group-drop-zone {
-  display: block;
-  pointer-events: auto;
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 body.is-group-dragging .group-drop-zone.active {
