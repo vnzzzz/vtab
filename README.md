@@ -7,6 +7,7 @@ Tab list for the Chrome side panel. Displays the current window’s tabs vertica
 - Emphasizes the active tab while keeping a concise vertical list of all open tabs
 - Shows `(no title)` when a tab title is unavailable to clarify state
 - Shows each tab’s favicon for quicker visual identification
+- Enables drag-and-drop reordering of the displayed tabs
 - Keeps the list fresh by listening to `chrome.tabs` creation, update, removal, and activation events
 - Applies `setPanelBehavior` in `background.js` so the side panel opens automatically when the extension icon is clicked
 

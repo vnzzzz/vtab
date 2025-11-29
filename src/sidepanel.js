@@ -1,10 +1,20 @@
 // sidepanel.js
 // Renders the list of tabs for the VTab side panel, keeping it in sync with
-// the active Chrome window.
+// the active Chrome window and managing inline reordering.
 
 // Simple gray tile used when tabs do not expose a favicon.
 const DEFAULT_FAVICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23E0E0E0'/%3E%3C/svg%3E";
+
+let currentTabs = [];
+
+async function moveTabToIndex(tabId, targetIndex) {
+  try {
+    await chrome.tabs.move(tabId, { index: targetIndex });
+  } catch (e) {
+    console.error("[VTab] Failed to move tab", e);
+  }
+}
 
 async function getCurrentWindowTabs() {
   // Fetch all tabs belonging to the window that currently owns focus.
@@ -15,11 +25,13 @@ function renderTabs(tabs) {
   const container = document.getElementById("tabs");
   container.innerHTML = "";
   // Remove any stale rows before re-rendering.
+  currentTabs = tabs;
 
   for (const tab of tabs) {
     const div = document.createElement("div");
     div.className = "tab" + (tab.active ? " active" : "");
     div.dataset.tabId = String(tab.id); // store the numeric tab id for the click handler
+    div.draggable = true;
 
     // Build the row content: favicon, title, and click handler.
     const icon = document.createElement("img");
@@ -48,8 +60,68 @@ function renderTabs(tabs) {
       }
     });
 
+    div.addEventListener("dragstart", (event) => {
+      const dataTransfer = event.dataTransfer;
+      if (!dataTransfer) {
+        return;
+      }
+      dataTransfer.setData("text/plain", String(tab.id));
+      // Provide visual feedback by hiding the default drag image.
+      dataTransfer.setDragImage(div, 0, 0);
+      dataTransfer.effectAllowed = "move";
+      div.classList.add("dragging");
+    });
+
+    div.addEventListener("dragend", () => {
+      div.classList.remove("dragging");
+    });
+
+    div.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      const dataTransfer = event.dataTransfer;
+      if (dataTransfer) {
+        dataTransfer.dropEffect = "move";
+      }
+      div.classList.add("drop-target");
+    });
+
+    div.addEventListener("dragleave", () => {
+      div.classList.remove("drop-target");
+    });
+
+    div.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      div.classList.remove("drop-target");
+      const sourceId = Number(event.dataTransfer?.getData("text/plain"));
+      if (!sourceId || sourceId === tab.id) {
+        return;
+      }
+      await moveTabToIndex(sourceId, tab.index);
+      refreshTabs().catch(console.error);
+    });
+
     container.appendChild(div);
   }
+
+  container.ondragover = (event) => {
+    event.preventDefault();
+    const dataTransfer = event.dataTransfer;
+    if (dataTransfer) {
+      dataTransfer.dropEffect = "move";
+    }
+  };
+
+  container.ondrop = async (event) => {
+    event.preventDefault();
+    const sourceId = Number(event.dataTransfer?.getData("text/plain"));
+    if (!sourceId) {
+      return;
+    }
+    const lastIndex = currentTabs.length - 1;
+    await moveTabToIndex(sourceId, lastIndex);
+    refreshTabs().catch(console.error);
+  };
 }
 
 // Pull the latest tab list and redraw the UI.
