@@ -442,16 +442,7 @@ function createGroupSection(group) {
   titleSpan.textContent = group.title;
   header.appendChild(titleSpan);
 
-  const dragHandle = document.createElement("span");
-  dragHandle.className = "group-drag-handle";
-  dragHandle.title = "Reorder group";
-  dragHandle.textContent = "::";
-  dragHandle.addEventListener("click", (event) => event.stopPropagation());
-  dragHandle.addEventListener("mousedown", (event) => event.stopPropagation());
-  header.insertBefore(dragHandle, titleSpan);
-
   bindGroupDragSource(header);
-  bindGroupDragSource(dragHandle);
 
   header.addEventListener("dragover", (event) => {
     const type = getDragType(event);

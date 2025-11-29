@@ -162,23 +162,6 @@ body.is-group-dragging .group-drop-zone.active {
   background: color-mix(in srgb, var(--tab-active-bg) 10%, transparent);
 }
 
-.group-drag-handle {
-  font-size: 14px;
-  color: var(--muted-text);
-  cursor: grab;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 8px 4px 2px;
-  min-width: 18px;
-}
-
-.tab-group-header.header-dragging .group-drag-handle {
-  cursor: grabbing;
-  opacity: 0.7;
-}
-
 .tab {
   display: flex;
   align-items: center;
@@ -274,6 +257,7 @@ body.is-group-dragging .group-drop-zone.active {
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 4px;
+  color: var(--menu-text);
 }
 
 .group-context-menu .menu-item:hover {
