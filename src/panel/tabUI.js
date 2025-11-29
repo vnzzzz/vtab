@@ -9,6 +9,54 @@ const groups = [];
 let groupCounter = 1;
 let currentTabs = [];
 let currentHandlers = null;
+let isGroupDragging = false;
+
+function beginGroupDrag() {
+  if (isGroupDragging) {
+    return;
+  }
+  isGroupDragging = true;
+  document.body.classList.add("is-group-dragging");
+}
+
+function endGroupDrag() {
+  if (!isGroupDragging) {
+    return;
+  }
+  isGroupDragging = false;
+  document.body.classList.remove("is-group-dragging");
+  document
+    .querySelectorAll(".group-drop-zone.active")
+    .forEach((el) => el.classList.remove("active"));
+}
+
+function getDragType(event) {
+  const dataTransfer = event.dataTransfer;
+  if (!dataTransfer) {
+    return null;
+  }
+  if (dataTransfer.types?.includes("type")) {
+    const value = dataTransfer.getData("type");
+    if (value) {
+      return value;
+    }
+  }
+  if (dataTransfer.types?.includes("group")) {
+    return "group";
+  }
+  if (dataTransfer.types?.includes("tab")) {
+    return "tab";
+  }
+  return dataTransfer.getData("type") || null;
+}
+
+function isTabDrag(event) {
+  return getDragType(event) === "tab";
+}
+
+function isGroupDrag(event) {
+  return isGroupDragging || getDragType(event) === "group";
+}
 
 const contextMenu = document.createElement("div");
 contextMenu.className = "group-context-menu";
@@ -202,6 +250,28 @@ function rerenderGroupOrder() {
   rerenderAndNotify();
 }
 
+function moveGroupToIndex(groupId, targetIndex) {
+  const currentIndex = groups.findIndex((group) => group.id === groupId);
+  if (currentIndex === -1) {
+    return;
+  }
+  const [group] = groups.splice(currentIndex, 1);
+  let destination = targetIndex;
+  if (currentIndex < destination) {
+    destination -= 1;
+  }
+  destination = Math.max(0, Math.min(destination, groups.length));
+  groups.splice(destination, 0, group);
+}
+
+function moveGroupBefore(groupId, targetGroupId) {
+  const targetIndex = groups.findIndex((group) => group.id === targetGroupId);
+  if (targetIndex === -1) {
+    return;
+  }
+  moveGroupToIndex(groupId, targetIndex);
+}
+
 function createTabRow(tab) {
   const div = document.createElement("div");
   div.className = "tab" + (tab.active ? " active" : "");
@@ -251,6 +321,9 @@ function createTabRow(tab) {
   });
 
   div.addEventListener("dragover", (event) => {
+    if (!isTabDrag(event)) {
+      return;
+    }
     event.preventDefault();
     const dataTransfer = event.dataTransfer;
     if (dataTransfer) {
@@ -264,6 +337,9 @@ function createTabRow(tab) {
   });
 
   div.addEventListener("drop", async (event) => {
+    if (!isTabDrag(event)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     div.classList.remove("drop-target");
@@ -320,32 +396,75 @@ function createGroupSection(group) {
   const header = document.createElement("div");
   header.className = "tab-group-header";
 
+  function bindGroupDragSource(element) {
+    element.setAttribute("draggable", "true");
+    element.dataset.dragType = "group";
+    element.dataset.groupId = group.id;
+    element.addEventListener("dragstart", (event) => {
+      const dataTransfer = event.dataTransfer;
+      if (!dataTransfer) {
+        return;
+      }
+      dataTransfer.setData("type", "group");
+      dataTransfer.setData("group", group.id);
+      dataTransfer.setData("text/plain", group.id);
+      dataTransfer.setData("text", group.id);
+      dataTransfer.effectAllowed = "move";
+      dataTransfer.dropEffect = "move";
+      if (typeof dataTransfer.setDragImage === "function") {
+        const rect = element.getBoundingClientRect();
+        dataTransfer.setDragImage(
+          element,
+          rect.width / 2,
+          rect.height / 2
+        );
+      }
+      header.classList.add("header-dragging");
+      beginGroupDrag();
+    });
+    element.addEventListener("dragend", () => {
+      header.classList.remove("header-dragging");
+      endGroupDrag();
+    });
+    element.addEventListener("mousedown", () => {
+      // Show drop zones immediately so the user gets feedback before moving.
+      beginGroupDrag();
+    });
+    element.addEventListener("mouseup", () => {
+      if (isGroupDragging) {
+        endGroupDrag();
+      }
+    });
+  }
+
   const titleSpan = document.createElement("span");
   titleSpan.className = "group-title";
   titleSpan.textContent = group.title;
   header.appendChild(titleSpan);
 
-  header.draggable = true;
-  header.dataset.dragType = "group";
-  header.dataset.groupId = group.id;
+  const dragHandle = document.createElement("span");
+  dragHandle.className = "group-drag-handle";
+  dragHandle.title = "Reorder group";
+  dragHandle.textContent = "::";
+  dragHandle.addEventListener("click", (event) => event.stopPropagation());
+  dragHandle.addEventListener("mousedown", (event) => event.stopPropagation());
+  header.insertBefore(dragHandle, titleSpan);
 
-  header.addEventListener("dragstart", (event) => {
-    const dataTransfer = event.dataTransfer;
-    if (!dataTransfer) {
-      return;
-    }
-    dataTransfer.setData("type", "group");
-    dataTransfer.setData("group", group.id);
-    dataTransfer.effectAllowed = "move";
-    header.classList.add("header-dragging");
-  });
-
-  header.addEventListener("dragend", () => {
-    header.classList.remove("header-dragging");
-  });
+  bindGroupDragSource(header);
+  bindGroupDragSource(dragHandle);
 
   header.addEventListener("dragover", (event) => {
+    const type = getDragType(event);
+    if (type !== "tab" && !isGroupDragging && type !== "group") {
+      return;
+    }
     event.preventDefault();
+    if (!isGroupDragging && type === "group") {
+      beginGroupDrag();
+    }
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
     header.classList.add("header-drop-target");
   });
 
@@ -367,10 +486,11 @@ function createGroupSection(group) {
     } else if (type === "group") {
       const sourceGroupId = event.dataTransfer?.getData("group");
       if (sourceGroupId) {
-        reorderGroups(sourceGroupId, group.id);
+        moveGroupBefore(sourceGroupId, group.id);
         rerenderAndNotify();
       }
     }
+    endGroupDrag();
   });
 
   const renameInput = document.createElement("input");
@@ -439,6 +559,9 @@ function createGroupSection(group) {
   const body = document.createElement("div");
   body.className = "tab-group-body";
   body.addEventListener("dragover", (event) => {
+    if (!isTabDrag(event)) {
+      return;
+    }
     event.preventDefault();
     body.classList.add("group-drop-target");
   });
@@ -448,6 +571,9 @@ function createGroupSection(group) {
   });
 
   body.addEventListener("drop", (event) => {
+    if (!isTabDrag(event)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     body.classList.remove("group-drop-target");
@@ -474,11 +600,66 @@ function createGroupSection(group) {
   return section;
 }
 
+function createGroupDropZone(targetIndex) {
+  const zone = document.createElement("div");
+  zone.className = "group-drop-zone";
+  zone.dataset.targetIndex = String(targetIndex);
+
+  const handleDragOver = (event) => {
+    if (!isGroupDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (!isGroupDragging) {
+      beginGroupDrag();
+    }
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+    zone.classList.add("active");
+  };
+
+  zone.addEventListener("dragenter", handleDragOver);
+  zone.addEventListener("dragover", handleDragOver);
+  zone.addEventListener("dragleave", () => {
+    zone.classList.remove("active");
+  });
+  zone.addEventListener("drop", (event) => {
+    if (!isGroupDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    zone.classList.remove("active");
+    const sourceGroupId = event.dataTransfer?.getData("group");
+    const target = Number(zone.dataset.targetIndex);
+    if (!sourceGroupId || Number.isNaN(target)) {
+      endGroupDrag();
+      return;
+    }
+    moveGroupToIndex(sourceGroupId, target);
+    rerenderAndNotify();
+    endGroupDrag();
+  });
+
+  return zone;
+}
+
 function setupContainerDrop(container) {
   container.ondragover = (event) => {
+    if (!isTabDrag(event)) {
+      if (isGroupDragging) {
+        event.preventDefault();
+      }
+      return;
+    }
     event.preventDefault();
   };
   container.ondrop = (event) => {
+    if (!isTabDrag(event)) {
+      return;
+    }
     event.preventDefault();
     const type = event.dataTransfer?.getData("type");
     if (type !== "tab") {
@@ -501,8 +682,12 @@ export function renderTabList(tabs, handlers) {
   const container = document.getElementById("tabs");
   container.innerHTML = "";
   renderUngroupedTabs(container);
-  for (const group of groups) {
-    container.appendChild(createGroupSection(group));
+  if (groups.length) {
+    container.appendChild(createGroupDropZone(0));
+    groups.forEach((group, index) => {
+      container.appendChild(createGroupSection(group));
+      container.appendChild(createGroupDropZone(index + 1));
+    });
   }
   setupContainerDrop(container);
   ensureContextMenuListeners();
