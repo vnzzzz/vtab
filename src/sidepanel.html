@@ -5,12 +5,36 @@
   <meta charset="utf-8" />
   <title>VTab</title>
   <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1c1c1c;
+      --border: rgba(0, 0, 0, 0.1);
+      --tab-bg: #f7f7f7;
+      --tab-hover: rgba(0, 0, 0, 0.06);
+      --tab-active-bg: #1a73e8;
+      --tab-active-text: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --text: #f4f4f5;
+        --border: rgba(255, 255, 255, 0.2);
+        --tab-bg: #1f2937;
+        --tab-hover: rgba(255, 255, 255, 0.08);
+        --tab-active-bg: #2563eb;
+        --tab-active-text: #ffffff;
+      }
+    }
+
     body {
       margin: 0;
       padding: 8px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
         sans-serif;
       font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
     }
 
     #tabs {
@@ -19,6 +43,12 @@
       gap: 4px;
       max-height: 100vh;
       overflow-y: auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--text);
     }
 
     .tab {
@@ -30,15 +60,17 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      background: var(--tab-bg);
+      border: 1px solid var(--border);
     }
 
     .tab:hover {
-      background: rgba(0, 0, 0, 0.06);
+      background: var(--tab-hover);
     }
 
     .tab.active {
-      background: #1a73e8;
-      color: white;
+      background: var(--tab-active-bg);
+      color: var(--tab-active-text);
     }
 
     .tab-icon {
