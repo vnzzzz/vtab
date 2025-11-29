@@ -20,7 +20,7 @@ Tab list for the Chrome side panel. Displays the current window’s tabs vertica
 ## Development
 
 1. Launch Chrome in developer mode and load `src/manifest.json` as an unpacked extension
-2. `src/sidepanel.html` + `src/sidepanel.js` render the tab list
+2. `src/panel/index.html` + `src/panel/index.js` render the side panel UI (using `panel.css` and supporting modules in `src/panel/`)
 3. Reload the extension or Chrome after source changes to see updates
 
 ## Packaging

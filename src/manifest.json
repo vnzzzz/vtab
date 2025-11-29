@@ -18,6 +18,6 @@
     "default_title": "VTab"
   },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "panel/index.html"
   }
 }

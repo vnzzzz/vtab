@@ -1,12 +1,12 @@
-// sidepanel.js
+// index.js
 // Entry point that wires the UI to Chrome tab APIs via dedicated helper modules.
 
 import {
   getCurrentWindowTabs,
   moveTabToIndex,
   subscribeToTabEvents,
-} from "./panel/tabService.js";
-import { renderTabList } from "./panel/tabUI.js";
+} from "./tabService.js";
+import { renderTabList } from "./tabUI.js";
 
 async function activateTab(tabId) {
   try {

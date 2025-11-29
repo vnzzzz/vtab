@@ -2,14 +2,47 @@
 // Renders grouped tabs, handles drag-and-drop interactions, and surfaces a right-click
 // context menu for associating tabs with groups.
 
+import { createContextMenu } from "./contextMenu.js";
+import {
+  buildGroupLayout,
+  createGroup,
+  findGroupContaining,
+  getGroups,
+  isTabGrouped,
+  moveGroupBefore,
+  moveGroupToIndex,
+  moveTabToGroup,
+  moveTabToUngrouped,
+  syncGroupsWithTabs,
+} from "./groupStore.js";
+
 const DEFAULT_FAVICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23E0E0E0'/%3E%3C/svg%3E";
 
-const groups = [];
-let groupCounter = 1;
+const DRAG_TYPE_TAB = "tab";
+const DRAG_TYPE_GROUP = "group";
+
 let currentTabs = [];
 let currentHandlers = null;
 let isGroupDragging = false;
+let contextMenu = null;
+
+function ensureContextMenu() {
+  if (contextMenu) {
+    return contextMenu;
+  }
+  contextMenu = createContextMenu({
+    getGroups,
+    onAssignToGroup(tabId, groupId) {
+      moveTabToGroup(tabId, groupId);
+      rerenderAndNotify();
+    },
+    onCreateGroup(name) {
+      return createGroup(name);
+    },
+  });
+  return contextMenu;
+}
 
 function beginGroupDrag() {
   if (isGroupDragging) {
@@ -41,141 +74,21 @@ function getDragType(event) {
       return value;
     }
   }
-  if (dataTransfer.types?.includes("group")) {
-    return "group";
+  if (dataTransfer.types?.includes(DRAG_TYPE_GROUP)) {
+    return DRAG_TYPE_GROUP;
   }
-  if (dataTransfer.types?.includes("tab")) {
-    return "tab";
+  if (dataTransfer.types?.includes(DRAG_TYPE_TAB)) {
+    return DRAG_TYPE_TAB;
   }
   return dataTransfer.getData("type") || null;
 }
 
 function isTabDrag(event) {
-  return getDragType(event) === "tab";
+  return getDragType(event) === DRAG_TYPE_TAB;
 }
 
 function isGroupDrag(event) {
-  return isGroupDragging || getDragType(event) === "group";
-}
-
-const contextMenu = document.createElement("div");
-contextMenu.className = "group-context-menu";
-contextMenu.innerHTML = `
-  <div class="menu-title">Assign to group</div>
-  <div class="menu-items"></div>
-  <div class="menu-divider"></div>
-  <div class="menu-new">
-    <input type="text" placeholder="New group name" autocomplete="off" spellcheck="false" />
-    <button type="button">Create</button>
-  </div>
-`;
-document.body.appendChild(contextMenu);
-contextMenu.addEventListener("click", (event) => event.stopPropagation());
-const menuItems = contextMenu.querySelector(".menu-items");
-const newGroupInput = contextMenu.querySelector(".menu-new input");
-const newGroupButton = contextMenu.querySelector(".menu-new button");
-let contextMenuTabId = null;
-let contextMenuListenersBound = false;
-
-function ensureContextMenuListeners() {
-  if (contextMenuListenersBound) {
-    return;
-  }
-  contextMenuListenersBound = true;
-  document.addEventListener("click", (event) => {
-    if (!contextMenu.contains(event.target)) {
-      hideContextMenu();
-    }
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      hideContextMenu();
-    }
-  });
-  newGroupButton.addEventListener("click", () => {
-    createGroupFromContextMenu();
-  });
-  newGroupInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      createGroupFromContextMenu();
-    }
-  });
-}
-
-function showContextMenu(tabId, x, y) {
-  contextMenuTabId = tabId;
-  menuItems.innerHTML = "";
-  if (groups.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "menu-empty";
-    empty.textContent = "No groups yet";
-    menuItems.appendChild(empty);
-  } else {
-    for (const group of groups) {
-      const option = document.createElement("button");
-      option.type = "button";
-      option.className = "menu-item";
-      option.textContent = group.title;
-      option.addEventListener("click", () => {
-        moveTabToGroup(contextMenuTabId, group.id);
-        rerenderAndNotify();
-        hideContextMenu();
-      });
-      menuItems.appendChild(option);
-    }
-  }
-
-  const padding = 8;
-  contextMenu.style.left = `${x}px`;
-  contextMenu.style.top = `${y}px`;
-  contextMenu.classList.add("visible");
-  const rect = contextMenu.getBoundingClientRect();
-  if (rect.right > window.innerWidth - padding) {
-    contextMenu.style.left = `${window.innerWidth - rect.width - padding}px`;
-  }
-  if (rect.bottom > window.innerHeight - padding) {
-    contextMenu.style.top = `${window.innerHeight - rect.height - padding}px`;
-  }
-  newGroupInput.value = "";
-  newGroupInput.focus();
-}
-
-function hideContextMenu() {
-  contextMenu.classList.remove("visible");
-  contextMenuTabId = null;
-}
-
-function createGroupFromContextMenu() {
-  if (!contextMenuTabId) {
-    return;
-  }
-  const name = newGroupInput.value.trim();
-  const group = createGroup(name || `Group ${groupCounter}`);
-  moveTabToGroup(contextMenuTabId, group.id);
-  rerenderAndNotify();
-  hideContextMenu();
-}
-
-function getGroupLayout() {
-  const layout = [
-    {
-      id: null,
-      title: null,
-      tabIds: currentTabs
-        .filter((tab) => !isTabGrouped(tab.id))
-        .map((tab) => tab.id),
-      isUngrouped: true,
-    },
-  ];
-  for (const group of groups) {
-    layout.push({
-      id: group.id,
-      title: group.title,
-      tabIds: [...group.tabIds],
-      isUngrouped: false,
-    });
-  }
-  return layout;
+  return isGroupDragging || getDragType(event) === DRAG_TYPE_GROUP;
 }
 
 function rerender() {
@@ -186,7 +99,7 @@ function rerender() {
 }
 
 function notifyLayoutChange() {
-  currentHandlers?.onGroupLayoutChange?.(getGroupLayout());
+  currentHandlers?.onGroupLayoutChange?.(buildGroupLayout(currentTabs));
 }
 
 function rerenderAndNotify() {
@@ -194,90 +107,12 @@ function rerenderAndNotify() {
   notifyLayoutChange();
 }
 
-function syncGroupsWithTabs(tabs) {
-  const validIds = new Set(tabs.map((tab) => tab.id));
-  for (const group of groups) {
-    group.tabIds = new Set([...group.tabIds].filter((id) => validIds.has(id)));
-  }
-}
-
-function findGroupById(id) {
-  return groups.find((group) => group.id === id);
-}
-
-function findGroupContaining(tabId) {
-  return groups.find((group) => group.tabIds.has(tabId));
-}
-
-function isTabGrouped(tabId) {
-  return !!findGroupContaining(tabId);
-}
-
-function createGroup(name) {
-  const id = `group-${Date.now()}-${groupCounter}`;
-  const group = {
-    id,
-    title: name || `Group ${groupCounter}`,
-    tabIds: new Set(),
-  };
-  groupCounter += 1;
-  groups.push(group);
-  return group;
-}
-
-function moveTabToGroup(tabId, groupId) {
-  const current = findGroupContaining(tabId);
-  if (current?.id === groupId) {
-    return;
-  }
-  if (current) {
-    current.tabIds.delete(tabId);
-  }
-  const target = findGroupById(groupId);
-  if (target) {
-    target.tabIds.add(tabId);
-  }
-}
-
-function moveTabToUngrouped(tabId) {
-  const current = findGroupContaining(tabId);
-  if (current) {
-    current.tabIds.delete(tabId);
-  }
-}
-
-function rerenderGroupOrder() {
-  rerenderAndNotify();
-}
-
-function moveGroupToIndex(groupId, targetIndex) {
-  const currentIndex = groups.findIndex((group) => group.id === groupId);
-  if (currentIndex === -1) {
-    return;
-  }
-  const [group] = groups.splice(currentIndex, 1);
-  let destination = targetIndex;
-  if (currentIndex < destination) {
-    destination -= 1;
-  }
-  destination = Math.max(0, Math.min(destination, groups.length));
-  groups.splice(destination, 0, group);
-}
-
-function moveGroupBefore(groupId, targetGroupId) {
-  const targetIndex = groups.findIndex((group) => group.id === targetGroupId);
-  if (targetIndex === -1) {
-    return;
-  }
-  moveGroupToIndex(groupId, targetIndex);
-}
-
 function createTabRow(tab) {
   const div = document.createElement("div");
   div.className = "tab" + (tab.active ? " active" : "");
   div.dataset.tabId = String(tab.id);
   div.draggable = true;
-  div.dataset.dragType = "tab";
+  div.dataset.dragType = DRAG_TYPE_TAB;
 
   const icon = document.createElement("img");
   icon.className = "tab-icon";
@@ -301,7 +136,7 @@ function createTabRow(tab) {
 
   div.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    showContextMenu(tab.id, event.clientX, event.clientY);
+    ensureContextMenu().show(tab.id, event.clientX, event.clientY);
   });
 
   div.addEventListener("dragstart", (event) => {
@@ -309,8 +144,8 @@ function createTabRow(tab) {
     if (!dataTransfer) {
       return;
     }
-    dataTransfer.setData("type", "tab");
-    dataTransfer.setData("tab", String(tab.id));
+    dataTransfer.setData("type", DRAG_TYPE_TAB);
+    dataTransfer.setData(DRAG_TYPE_TAB, String(tab.id));
     dataTransfer.setDragImage(div, 0, 0);
     dataTransfer.effectAllowed = "move";
     div.classList.add("dragging");
@@ -344,10 +179,10 @@ function createTabRow(tab) {
     event.stopPropagation();
     div.classList.remove("drop-target");
     const type = event.dataTransfer?.getData("type");
-    if (type !== "tab") {
+    if (type !== DRAG_TYPE_TAB) {
       return;
     }
-    const sourceId = Number(event.dataTransfer?.getData("tab"));
+    const sourceId = Number(event.dataTransfer?.getData(DRAG_TYPE_TAB));
     if (!sourceId || sourceId === tab.id) {
       return;
     }
@@ -398,15 +233,15 @@ function createGroupSection(group) {
 
   function bindGroupDragSource(element) {
     element.setAttribute("draggable", "true");
-    element.dataset.dragType = "group";
+    element.dataset.dragType = DRAG_TYPE_GROUP;
     element.dataset.groupId = group.id;
     element.addEventListener("dragstart", (event) => {
       const dataTransfer = event.dataTransfer;
       if (!dataTransfer) {
         return;
       }
-      dataTransfer.setData("type", "group");
-      dataTransfer.setData("group", group.id);
+      dataTransfer.setData("type", DRAG_TYPE_GROUP);
+      dataTransfer.setData(DRAG_TYPE_GROUP, group.id);
       dataTransfer.setData("text/plain", group.id);
       dataTransfer.setData("text", group.id);
       dataTransfer.effectAllowed = "move";
@@ -446,11 +281,11 @@ function createGroupSection(group) {
 
   header.addEventListener("dragover", (event) => {
     const type = getDragType(event);
-    if (type !== "tab" && !isGroupDragging && type !== "group") {
+    if (type !== DRAG_TYPE_TAB && !isGroupDragging && type !== DRAG_TYPE_GROUP) {
       return;
     }
     event.preventDefault();
-    if (!isGroupDragging && type === "group") {
+    if (!isGroupDragging && type === DRAG_TYPE_GROUP) {
       beginGroupDrag();
     }
     if (event.dataTransfer) {
@@ -468,14 +303,14 @@ function createGroupSection(group) {
     event.stopPropagation();
     header.classList.remove("header-drop-target");
     const type = event.dataTransfer?.getData("type");
-    if (type === "tab") {
-      const tabId = Number(event.dataTransfer?.getData("tab"));
+    if (type === DRAG_TYPE_TAB) {
+      const tabId = Number(event.dataTransfer?.getData(DRAG_TYPE_TAB));
       if (tabId) {
         moveTabToGroup(tabId, group.id);
         rerenderAndNotify();
       }
-    } else if (type === "group") {
-      const sourceGroupId = event.dataTransfer?.getData("group");
+    } else if (type === DRAG_TYPE_GROUP) {
+      const sourceGroupId = event.dataTransfer?.getData(DRAG_TYPE_GROUP);
       if (sourceGroupId) {
         moveGroupBefore(sourceGroupId, group.id);
         rerenderAndNotify();
@@ -569,10 +404,10 @@ function createGroupSection(group) {
     event.stopPropagation();
     body.classList.remove("group-drop-target");
     const type = event.dataTransfer?.getData("type");
-    if (type !== "tab") {
+    if (type !== DRAG_TYPE_TAB) {
       return;
     }
-    const tabId = Number(event.dataTransfer?.getData("tab"));
+    const tabId = Number(event.dataTransfer?.getData(DRAG_TYPE_TAB));
     if (tabId) {
       moveTabToGroup(tabId, group.id);
       rerenderAndNotify();
@@ -623,7 +458,7 @@ function createGroupDropZone(targetIndex) {
     event.preventDefault();
     event.stopPropagation();
     zone.classList.remove("active");
-    const sourceGroupId = event.dataTransfer?.getData("group");
+    const sourceGroupId = event.dataTransfer?.getData(DRAG_TYPE_GROUP);
     const target = Number(zone.dataset.targetIndex);
     if (!sourceGroupId || Number.isNaN(target)) {
       endGroupDrag();
@@ -653,10 +488,10 @@ function setupContainerDrop(container) {
     }
     event.preventDefault();
     const type = event.dataTransfer?.getData("type");
-    if (type !== "tab") {
+    if (type !== DRAG_TYPE_TAB) {
       return;
     }
-    const tabId = Number(event.dataTransfer?.getData("tab"));
+    const tabId = Number(event.dataTransfer?.getData(DRAG_TYPE_TAB));
     if (!tabId) {
       return;
     }
@@ -673,6 +508,8 @@ export function renderTabList(tabs, handlers) {
   const container = document.getElementById("tabs");
   container.innerHTML = "";
   renderUngroupedTabs(container);
+
+  const groups = getGroups();
   if (groups.length) {
     container.appendChild(createGroupDropZone(0));
     groups.forEach((group, index) => {
@@ -680,6 +517,7 @@ export function renderTabList(tabs, handlers) {
       container.appendChild(createGroupDropZone(index + 1));
     });
   }
+
   setupContainerDrop(container);
-  ensureContextMenuListeners();
+  ensureContextMenu();
 }
