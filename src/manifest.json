@@ -3,7 +3,7 @@
   "name": "VTab – Vertical Tabs Side Panel",
   "version": "0.1.0",
   "description": "Chrome のサイドパネルに現在のウィンドウのタブを縦に一覧表示し、クリックで素早く切り替えできる拡張機能です。",
-  "permissions": ["tabs", "sidePanel"],
+  "permissions": ["tabs", "sidePanel", "storage"],
   "background": {
     "service_worker": "background.js",
     "type": "module"

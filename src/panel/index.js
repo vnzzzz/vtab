@@ -6,6 +6,7 @@ import {
   moveTabToIndex,
   subscribeToTabEvents,
 } from "./tabService.js";
+import { initializeGroupStore } from "./groupStore.js";
 import { renderTabList } from "./tabUI.js";
 
 async function activateTab(tabId) {
@@ -45,8 +46,14 @@ async function reorderChromeTabs(layout) {
   await refreshTabs();
 }
 
-refreshTabs().catch(console.error);
+async function start() {
+  await initializeGroupStore();
+  await refreshTabs();
+  subscribeToTabEvents(() => {
+    refreshTabs().catch(console.error);
+  });
+}
 
-subscribeToTabEvents(() => {
-  refreshTabs().catch(console.error);
+start().catch((error) => {
+  console.error("[VTab] Failed to initialize panel", error);
 });

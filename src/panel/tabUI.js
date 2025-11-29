@@ -13,6 +13,7 @@ import {
   moveGroupToIndex,
   moveTabToGroup,
   moveTabToUngrouped,
+  renameGroup,
   syncGroupsWithTabs,
 } from "./groupStore.js";
 
@@ -350,7 +351,7 @@ function createGroupSection(group) {
   function commitRename() {
     const value = renameInput.value.trim();
     if (value) {
-      group.title = value;
+      renameGroup(group.id, value);
     }
     endInlineRename();
   }
